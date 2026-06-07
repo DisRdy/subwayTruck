@@ -1,53 +1,73 @@
-# SubwaySurferGame
+# Subway Truck
 
-Game Java Swing sederhana dengan mekanisme lane seperti Subway Surfers. Player berada di bagian bawah layar dan bisa berpindah di antara 3 lane untuk menghindari obstacle yang turun dari atas.
+Subway Truck adalah game sederhana berbasis Java Swing. Game ini memakai mekanisme 3 lane seperti endless runner: player berada di bawah layar dan harus menghindari obstacle merah yang turun dari atas.
 
-Project ini tidak memakai database dan tidak memakai library eksternal. Leaderboard tetap ada, tetapi hanya disimpan sementara di memori selama aplikasi masih berjalan.
+Game ini tidak memakai database dan tidak membutuhkan library eksternal. Semua data leaderboard hanya disimpan sementara di memori.
 
 ## Cara Menjalankan
 
-Compile file utama:
+Compile:
 
 ```powershell
 javac SubwaySurferGame.java
 ```
 
-Jalankan game:
+Run:
 
 ```powershell
 java SubwaySurferGame
 ```
 
-## Mekanisme Game
+## Fitur Utama
 
-Game memakai 3 lane vertikal:
+- Home screen dengan tombol `PLAY` dan `EXIT`
+- 3 lane: kiri, tengah, kanan
+- Player berpindah lane dengan keyboard
+- Obstacle turun dari atas layar
+- Collision detection antara player dan obstacle
+- Game Over screen
+- Input nama setelah game over
+- Leaderboard top 5 sementara
+- Restart game dengan tombol `R`
+- Kembali ke Home dengan tombol `H`
 
-- Lane `0`: kiri
-- Lane `1`: tengah
-- Lane `2`: kanan
+## Alur Game
 
-Player mulai dari lane tengah, yaitu `playerLane = 1`. Saat tombol panah kiri ditekan, lane player berkurang 1 sampai batas minimum 0. Saat tombol panah kanan ditekan, lane player bertambah 1 sampai batas maksimum 2.
+1. Aplikasi dibuka di halaman Home.
+2. Player menekan tombol `PLAY`.
+3. Game mulai berjalan dan score bertambah setiap tick.
+4. Obstacle muncul secara acak dan bergerak turun.
+5. Jika obstacle menabrak player, game berhenti.
+6. Player memasukkan nama.
+7. Score disimpan ke leaderboard sementara.
+8. Player bisa restart atau kembali ke Home.
 
-Perpindahan lane terjadi langsung tanpa animasi. Ini membuat game sederhana dan mudah dipahami untuk versi awal.
+## Kontrol
 
-## Game Loop
+| Tombol | Fungsi |
+| --- | --- |
+| Left Arrow | Pindah ke lane kiri |
+| Right Arrow | Pindah ke lane kanan |
+| Enter | Submit nama di input field |
+| Submit | Simpan score |
+| R | Restart saat Game Over |
+| H | Kembali ke Home saat Game Over |
 
-Game loop dibuat memakai `javax.swing.Timer` dengan delay 16 ms:
+## Mekanisme Lane
+
+Game memakai 3 lane:
+
+- `0` = kiri
+- `1` = tengah
+- `2` = kanan
+
+Player mulai dari lane tengah:
 
 ```java
-timer = new Timer(16, event -> updateGame());
+int playerLane = 1;
 ```
 
-Delay 16 ms mendekati 60 FPS. Setiap tick, method `updateGame()` menjalankan beberapa hal:
-
-- Menambah `tickCount`
-- Menambah `score`
-- Mengecek apakah waktunya spawn obstacle baru
-- Menggerakkan semua obstacle ke bawah
-- Mengecek collision antara player dan obstacle
-- Memanggil `repaint()` agar layar digambar ulang
-
-Kalau game sudah over, timer dihentikan dengan `timer.stop()` supaya game benar-benar pause.
+Saat tombol kiri ditekan, nilai lane dikurangi. Saat tombol kanan ditekan, nilai lane ditambah. Nilai lane dibatasi agar tidak keluar dari `0` sampai `2`.
 
 ## Obstacle
 
@@ -57,7 +77,7 @@ Obstacle disimpan dalam:
 ArrayList<int[]> obstacles = new ArrayList<>();
 ```
 
-Setiap obstacle berbentuk array integer:
+Setiap obstacle memakai format:
 
 ```java
 {laneIndex, yPosition}
@@ -66,182 +86,76 @@ Setiap obstacle berbentuk array integer:
 Contoh:
 
 ```java
-new int[] {2, -50}
+new int[] {1, -OBS_H}
 ```
 
-Artinya obstacle muncul di lane kanan dan mulai dari posisi atas layar.
+Artinya obstacle muncul di lane tengah dan mulai dari atas layar.
 
-Obstacle baru dibuat setiap 60 sampai 90 tick secara acak:
+## Game Loop
+
+Game loop memakai `javax.swing.Timer`:
 
 ```java
-private int randomSpawnInterval() {
-    return 60 + random.nextInt(31);
-}
+Timer timer = new Timer(FPS, e -> update());
 ```
 
-Setiap tick, obstacle turun dengan kecepatan tetap:
+Setiap update:
 
-```java
-obstacle[1] += OBSTACLE_SPEED;
-```
+- Score bertambah
+- Tick bertambah
+- Obstacle baru bisa muncul
+- Obstacle bergerak turun
+- Collision dicek
+- Panel digambar ulang dengan `repaint()`
 
-Obstacle yang sudah melewati bagian bawah panel akan dihapus dari list.
-
-## Collision
+## Collision Detection
 
 Collision terjadi jika:
 
-- Obstacle berada di lane yang sama dengan player
-- Area Y obstacle sudah menyentuh area Y player
+- Lane obstacle sama dengan lane player
+- Posisi Y obstacle menyentuh area Y player
 
-Logika utamanya ada di `checkCollisions()`:
+Logika sederhananya:
 
 ```java
-if (obstacleLane == playerLane && obstacleBottom >= playerY && obstacleY <= playerBottom) {
-    handleGameOver();
-}
+boolean sameLane = obs[0] == playerLane;
+boolean sameY = obs[1] + OBS_H >= playerY && obs[1] <= playerY + PLAYER_H;
 ```
 
-Jika collision terjadi, game masuk ke mode game over.
-
-## Game Over dan Input Nama
-
-Saat game over:
-
-- Timer dihentikan
-- Teks `GAME OVER` ditampilkan
-- Final score ditampilkan
-- Input nama dan tombol `Submit` muncul
-
-Nama player divalidasi sebelum disimpan:
-
-- Spasi di awal dan akhir dihapus dengan `trim()`
-- Nama kosong ditolak
-- Panjang nama dibatasi maksimal 15 karakter
-
-Pembatasan 15 karakter dibuat memakai `DocumentFilter` di class `NameLengthFilter`.
-
-Setelah submit:
-
-- Score masuk ke leaderboard memori
-- Leaderboard diurutkan dari score terbesar
-- Hanya top 5 yang ditampilkan
-- Input nama dan tombol submit disembunyikan
-- Pesan `Press R to Restart` muncul
+Jika `sameLane` dan `sameY` bernilai `true`, maka game over.
 
 ## Leaderboard
 
-Leaderboard digambar di kanan atas layar oleh method `drawLeaderboard(Graphics2D g2)`.
-
-Data score lengkap disimpan sementara di:
+Leaderboard disimpan di memori:
 
 ```java
-private final ArrayList<String[]> allScores = new ArrayList<>();
+static ArrayList<ScoreEntry> leaderboard = new ArrayList<>();
 ```
 
-Data top 5 yang ditampilkan disimpan di:
+Saat score baru masuk:
 
-```java
-private List<String[]> leaderboard = new ArrayList<>();
-```
+1. Data nama dan score ditambahkan.
+2. Leaderboard diurutkan dari score terbesar.
+3. Data dibatasi hanya top 5.
 
-Saat score baru disubmit, method `refreshLeaderboard()` akan:
-
-- Menyalin semua score
-- Mengurutkan score dari terbesar ke terkecil
-- Mengambil maksimal 5 data teratas
-- Memperbarui tampilan leaderboard
-
-Karena tidak memakai database, leaderboard akan reset saat aplikasi ditutup.
+Karena tidak memakai database, leaderboard akan kosong lagi setelah program ditutup.
 
 ## Struktur Kode
 
-File utama adalah `SubwaySurferGame.java`.
+Semua kode berada dalam satu file:
 
-### `SubwaySurferGame extends JFrame`
+```text
+SubwaySurferGame.java
+```
 
-Class utama yang membuat window game. Di constructor, class ini:
+Class utama:
 
-- Mengatur judul window
-- Mengatur close operation
-- Membuat `GamePanel`
-- Memasang panel ke frame
-- Mengatur ukuran window dari ukuran panel
-- Meminta fokus keyboard ke game panel
-
-### `GamePanel extends JPanel implements KeyListener`
-
-Class ini berisi hampir semua logic game, termasuk:
-
-- State player
-- State obstacle
-- Score
-- Leaderboard
-- Timer game loop
-- Gambar UI
-- Input keyboard
-- Input nama saat game over
-
-### Method Penting
-
-`updateGame()`
-
-Menjalankan logic utama setiap tick.
-
-`spawnObstacle()`
-
-Membuat obstacle baru di lane acak.
-
-`moveObstacles()`
-
-Menggerakkan obstacle ke bawah dan menghapus obstacle yang keluar layar.
-
-`checkCollisions()`
-
-Mengecek apakah obstacle bertabrakan dengan player.
-
-`handleGameOver()`
-
-Mengubah state menjadi game over, menghentikan timer, dan menampilkan input nama.
-
-`submitScore()`
-
-Memvalidasi nama, menyimpan score ke memori, dan memperbarui leaderboard.
-
-`restartGame()`
-
-Mengembalikan game ke kondisi awal:
-
-- Player kembali ke lane tengah
-- Obstacle dibersihkan
-- Score kembali 0
-- Timer jalan lagi
-
-`paintComponent(Graphics graphics)`
-
-Method utama untuk menggambar tampilan game. Method ini memanggil:
-
-- `drawLanes()`
-- `drawPlayer()`
-- `drawObstacles()`
-- `drawScore()`
-- `drawLeaderboard()`
-- `drawGameOver()` jika game over
-
-## Kontrol
-
-- Panah kiri: pindah ke lane kiri
-- Panah kanan: pindah ke lane kanan
-- Enter di input nama: submit score
-- Tombol Submit: submit score
-- R: restart setelah score disubmit
+- `SubwaySurferGame`: membuat window, CardLayout, dan mengatur pindah screen.
+- `HomePanel`: tampilan awal game.
+- `GamePanel`: gameplay, timer, keyboard input, rendering, dan game over.
+- `ScoreEntry`: model sederhana untuk nama dan score.
+- `NameFilter`: membatasi input nama maksimal 15 karakter.
 
 ## Catatan
 
-Game ini sengaja dibuat sederhana agar mudah dipelajari. Beberapa fitur yang bisa ditambahkan nanti:
-
-- Animasi perpindahan lane
-- Kecepatan obstacle meningkat seiring score
-- Koin atau power-up
-- Sprite gambar untuk player dan obstacle
-- Leaderboard permanen dengan file atau database
+File `.class` adalah hasil compile dari Java. File utama yang diedit adalah `SubwaySurferGame.java`.

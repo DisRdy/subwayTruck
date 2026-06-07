@@ -1,441 +1,354 @@
-import java.awt.BasicStroke;
-import java.awt.Color;
-import java.awt.Dimension;
-import java.awt.Font;
-import java.awt.FontMetrics;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
-import java.awt.event.KeyEvent;
-import java.awt.event.KeyListener;
+import java.awt.*;
+import java.awt.event.*;
 import java.util.ArrayList;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Random;
-import javax.swing.JButton;
-import javax.swing.JFrame;
-import javax.swing.JPanel;
-import javax.swing.SwingUtilities;
-import javax.swing.JTextField;
-import javax.swing.Timer;
-import javax.swing.text.AbstractDocument;
-import javax.swing.text.AttributeSet;
-import javax.swing.text.BadLocationException;
-import javax.swing.text.DocumentFilter;
+import javax.swing.*;
+import javax.swing.text.*;
 
 public class SubwaySurferGame extends JFrame {
+    static final int W = 400, H = 700, LANES = 3;
+    static final int PLAYER_W = 40, PLAYER_H = 60, OBS_W = 40, OBS_H = 50;
+    static final int SPEED = 5, FPS = 16, MAX_NAME = 15, TOP_LIMIT = 5;
+    static final Color BG = new Color(0x2b2b2b), GOLD = new Color(0xFFD700);
+
+    static ArrayList<ScoreEntry> leaderboard = new ArrayList<>();
+
+    CardLayout cards = new CardLayout();
+    JPanel root = new JPanel(cards);
+    HomePanel home = new HomePanel();
+    GamePanel game = new GamePanel();
+
     public SubwaySurferGame() {
-        setTitle("Subway Surfer Lane Game");
+        setTitle("Subway Truck");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setResizable(false);
-
-        GamePanel gamePanel = new GamePanel();
-        add(gamePanel);
+        root.add(home, "HOME");
+        root.add(game, "GAME");
+        setContentPane(root);
         pack();
         setLocationRelativeTo(null);
-
-        SwingUtilities.invokeLater(gamePanel::requestFocusInWindow);
+        showHome();
     }
 
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            SubwaySurferGame game = new SubwaySurferGame();
-            game.setVisible(true);
-        });
+        SwingUtilities.invokeLater(() -> new SubwaySurferGame().setVisible(true));
+    }
+
+    void showHome() {
+        game.stop();
+        home.refreshBest();
+        cards.show(root, "HOME");
+    }
+
+    void showGame() {
+        cards.show(root, "GAME");
+        game.start();
+        SwingUtilities.invokeLater(game::requestFocusInWindow);
+    }
+
+    static void saveScore(String name, int score) {
+        leaderboard.add(new ScoreEntry(name, score));
+        leaderboard.sort((a, b) -> b.score - a.score);
+        while (leaderboard.size() > TOP_LIMIT) {
+            leaderboard.remove(leaderboard.size() - 1);
+        }
+    }
+
+    class HomePanel extends JPanel {
+        String bestText = "\uD83C\uDFC6 No records yet. Be the first!";
+
+        HomePanel() {
+            setPreferredSize(new Dimension(W, H));
+            setBackground(BG);
+            setLayout(null);
+            add(button("\u25B6  PLAY", 340, new Color(0x4CAF50), new Color(0x66BB6A), e -> showGame()));
+            add(button("EXIT", 410, new Color(0xD32F2F), new Color(0xEF5350), e -> System.exit(0)));
+        }
+
+        JButton button(String text, int y, Color normal, Color hover, ActionListener action) {
+            JButton btn = new JButton(text);
+            btn.setBounds(120, y, 160, 55);
+            btn.setFont(new Font("Arial", Font.BOLD, 22));
+            btn.setForeground(Color.WHITE);
+            btn.setBackground(normal);
+            btn.setFocusPainted(false);
+            btn.addActionListener(action);
+            btn.addMouseListener(new MouseAdapter() {
+                public void mouseEntered(MouseEvent e) { btn.setBackground(hover); }
+                public void mouseExited(MouseEvent e) { btn.setBackground(normal); }
+            });
+            return btn;
+        }
+
+        void refreshBest() {
+            if (leaderboard.isEmpty()) {
+                bestText = "\uD83C\uDFC6 No records yet. Be the first!";
+            } else {
+                ScoreEntry best = leaderboard.get(0);
+                bestText = "\uD83C\uDFC6 Best: " + best.name + " - " + best.score;
+            }
+            repaint();
+        }
+
+        protected void paintComponent(Graphics gr) {
+            super.paintComponent(gr);
+            Graphics2D g = (Graphics2D) gr;
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            center(g, "\uD83D\uDE9B SUBWAY TRUCK", 48, GOLD, 120);
+            center(g, "How far can you go?", 16, Color.LIGHT_GRAY, 155);
+            center(g, bestText, 14, Color.WHITE, 655);
+        }
+
+        void center(Graphics2D g, String text, int size, Color color, int y) {
+            g.setFont(new Font("Segoe UI Emoji", Font.BOLD, size));
+            g.setColor(color);
+            g.drawString(text, (getWidth() - g.getFontMetrics().stringWidth(text)) / 2, y);
+        }
     }
 
     class GamePanel extends JPanel implements KeyListener {
-        private static final int PANEL_WIDTH = 400;
-        private static final int PANEL_HEIGHT = 700;
-        private static final int PLAYER_WIDTH = 40;
-        private static final int PLAYER_HEIGHT = 60;
-        private static final int OBSTACLE_WIDTH = 40;
-        private static final int OBSTACLE_HEIGHT = 50;
-        private static final int PLAYER_BOTTOM_MARGIN = 70;
-        private static final int OBSTACLE_SPEED = 5;
-        private static final int MAX_NAME_LENGTH = 15;
-
-        int playerLane = 1;
+        int playerLane = 1, score = 0, tick = 0, nextSpawn = 70;
+        boolean gameOver = false, submitted = false;
+        String error = "";
+        Random random = new Random();
         ArrayList<int[]> obstacles = new ArrayList<>();
-        int score = 0;
-        boolean gameOver = false;
-        int tickCount = 0;
-        int nextObstacleSpawn;
-
-        private final Random random = new Random();
-        private final Timer timer;
-        private final JTextField nameField = new JTextField();
-        private final JButton submitButton = new JButton("Submit");
-        private final ArrayList<String[]> allScores = new ArrayList<>();
-        private List<String[]> leaderboard = new ArrayList<>();
-        private boolean scoreSubmitted = false;
-        private String nameErrorMessage = "";
+        Timer timer = new Timer(FPS, e -> update());
+        JTextField nameField = new JTextField();
+        JButton submit = new JButton("Submit");
 
         GamePanel() {
-            setPreferredSize(new Dimension(PANEL_WIDTH, PANEL_HEIGHT));
-            setBackground(new Color(0x2b2b2b));
+            setPreferredSize(new Dimension(W, H));
+            setBackground(BG);
             setLayout(null);
             setFocusable(true);
             addKeyListener(this);
+            setupInput();
+        }
 
-            setupNameInputControls();
+        void setupInput() {
+            nameField.setBounds(110, 350, 180, 28);
+            nameField.setHorizontalAlignment(JTextField.CENTER);
+            ((AbstractDocument) nameField.getDocument()).setDocumentFilter(new NameFilter());
+            nameField.addActionListener(e -> submitScore());
+            submit.setBounds(150, 390, 100, 30);
+            submit.addActionListener(e -> submitScore());
+            add(nameField);
+            add(submit);
+            hideInput();
+        }
 
-            nextObstacleSpawn = randomSpawnInterval();
-            timer = new Timer(16, event -> updateGame());
+        void start() {
+            reset();
             timer.start();
         }
 
-        private void setupNameInputControls() {
-            nameField.setFont(new Font("Arial", Font.PLAIN, 16));
-            nameField.setHorizontalAlignment(JTextField.CENTER);
-            ((AbstractDocument) nameField.getDocument()).setDocumentFilter(new NameLengthFilter());
-            nameField.addActionListener(event -> submitScore());
-
-            submitButton.setFont(new Font("Arial", Font.BOLD, 14));
-            submitButton.addActionListener(event -> submitScore());
-
-            nameField.setVisible(false);
-            submitButton.setVisible(false);
-
-            add(nameField);
-            add(submitButton);
+        void stop() {
+            timer.stop();
+            hideInput();
         }
 
-        private void updateGame() {
-            if (!gameOver) {
-                tickCount++;
-                score++;
-
-                if (tickCount >= nextObstacleSpawn) {
-                    spawnObstacle();
-                    nextObstacleSpawn = tickCount + randomSpawnInterval();
-                }
-
-                moveObstacles();
-                checkCollisions();
-            }
-
+        void reset() {
+            playerLane = 1;
+            score = tick = 0;
+            nextSpawn = spawnDelay();
+            gameOver = submitted = false;
+            error = "";
+            obstacles.clear();
+            hideInput();
             repaint();
         }
 
-        private int randomSpawnInterval() {
+        void update() {
+            score++;
+            tick++;
+            if (tick >= nextSpawn) {
+                obstacles.add(new int[] {random.nextInt(LANES), -OBS_H});
+                nextSpawn = tick + spawnDelay();
+            }
+            moveObstacles();
+            checkCollision();
+            repaint();
+        }
+
+        int spawnDelay() {
             return 60 + random.nextInt(31);
         }
 
-        private void spawnObstacle() {
-            int lane = random.nextInt(3);
-            obstacles.add(new int[] {lane, -OBSTACLE_HEIGHT});
-        }
-
-        private void moveObstacles() {
-            Iterator<int[]> iterator = obstacles.iterator();
-            while (iterator.hasNext()) {
-                int[] obstacle = iterator.next();
-                obstacle[1] += OBSTACLE_SPEED;
-
-                if (obstacle[1] > getHeight()) {
-                    iterator.remove();
+        void moveObstacles() {
+            Iterator<int[]> it = obstacles.iterator();
+            while (it.hasNext()) {
+                int[] obs = it.next();
+                obs[1] += SPEED;
+                if (obs[1] > getHeight()) {
+                    it.remove();
                 }
             }
         }
 
-        private void checkCollisions() {
-            int playerY = getPlayerY();
-            int playerBottom = playerY + PLAYER_HEIGHT;
-
-            for (int[] obstacle : obstacles) {
-                int obstacleLane = obstacle[0];
-                int obstacleY = obstacle[1];
-                int obstacleBottom = obstacleY + OBSTACLE_HEIGHT;
-
-                if (obstacleLane == playerLane && obstacleBottom >= playerY && obstacleY <= playerBottom) {
-                    handleGameOver();
-                    break;
+        void checkCollision() {
+            int playerY = playerY();
+            for (int[] obs : obstacles) {
+                boolean sameLane = obs[0] == playerLane;
+                boolean sameY = obs[1] + OBS_H >= playerY && obs[1] <= playerY + PLAYER_H;
+                if (sameLane && sameY) {
+                    endGame();
+                    return;
                 }
             }
         }
 
-        private void handleGameOver() {
+        void endGame() {
             gameOver = true;
-            scoreSubmitted = false;
             timer.stop();
-            showNameInputControls();
-            repaint();
-        }
-
-        private void restartGame() {
-            hideNameInputControls();
-            playerLane = 1;
-            obstacles.clear();
-            score = 0;
-            gameOver = false;
-            scoreSubmitted = false;
-            nameErrorMessage = "";
-            tickCount = 0;
-            nextObstacleSpawn = randomSpawnInterval();
-            timer.start();
-            requestFocusInWindow();
-            repaint();
-        }
-
-        private void submitScore() {
-            if (scoreSubmitted) {
-                return;
-            }
-
-            String playerName = nameField.getText().trim();
-
-            if (playerName.isEmpty()) {
-                nameErrorMessage = "Name cannot be empty";
-                nameField.requestFocusInWindow();
-                repaint();
-                return;
-            }
-
-            submitButton.setEnabled(false);
-            saveScore(playerName, score);
-            refreshLeaderboard();
-            scoreSubmitted = true;
-            nameErrorMessage = "";
-            hideNameInputControls();
-            requestFocusInWindow();
-            repaint();
-        }
-
-        private void saveScore(String playerName, int finalScore) {
-            allScores.add(new String[] {playerName, String.valueOf(finalScore)});
-        }
-
-        private void refreshLeaderboard() {
-            ArrayList<String[]> sortedScores = new ArrayList<>(allScores);
-            sortedScores.sort((first, second) -> Integer.compare(
-                    Integer.parseInt(second[1]),
-                    Integer.parseInt(first[1])));
-
-            int topScoreCount = Math.min(5, sortedScores.size());
-            leaderboard = new ArrayList<>(sortedScores.subList(0, topScoreCount));
-        }
-
-        private void showNameInputControls() {
             nameField.setText("");
-            nameErrorMessage = "";
-            positionNameInputControls();
-            submitButton.setEnabled(true);
             nameField.setVisible(true);
-            submitButton.setVisible(true);
+            submit.setVisible(true);
             nameField.requestFocusInWindow();
         }
 
-        private void hideNameInputControls() {
-            nameField.setVisible(false);
-            submitButton.setVisible(false);
-        }
-
-        private void positionNameInputControls() {
-            int fieldWidth = 180;
-            int fieldHeight = 28;
-            int buttonWidth = 100;
-            int buttonHeight = 30;
-            int fieldX = (getWidth() - fieldWidth) / 2;
-            int fieldY = getHeight() / 2 + 40;
-            int buttonX = (getWidth() - buttonWidth) / 2;
-            int buttonY = fieldY + fieldHeight + 12;
-
-            nameField.setBounds(fieldX, fieldY, fieldWidth, fieldHeight);
-            submitButton.setBounds(buttonX, buttonY, buttonWidth, buttonHeight);
-        }
-
-        @Override
-        protected void paintComponent(Graphics graphics) {
-            super.paintComponent(graphics);
-
-            Graphics2D g2 = (Graphics2D) graphics;
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-            drawLanes(g2);
-            drawPlayer(g2);
-            drawObstacles(g2);
-            drawScore(g2);
-            drawLeaderboard(g2);
-
-            if (gameOver) {
-                drawGameOver(g2);
+        void submitScore() {
+            if (submitted) return;
+            String name = nameField.getText().trim();
+            if (name.isEmpty()) {
+                error = "Name cannot be empty";
+                repaint();
+                return;
             }
+            saveScore(name, score);
+            submitted = true;
+            error = "";
+            hideInput();
+            requestFocusInWindow();
+            repaint();
         }
 
-        private void drawLanes(Graphics2D g2) {
-            int laneWidth = getWidth() / 3;
+        void hideInput() {
+            nameField.setVisible(false);
+            submit.setVisible(false);
+        }
 
-            g2.setColor(Color.LIGHT_GRAY);
-            g2.setStroke(new BasicStroke(
+        protected void paintComponent(Graphics gr) {
+            super.paintComponent(gr);
+            Graphics2D g = (Graphics2D) gr;
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            drawLanes(g);
+            drawGameObjects(g);
+            drawScore(g);
+            drawLeaderboard(g);
+            if (gameOver) drawGameOver(g);
+        }
+
+        void drawLanes(Graphics2D g) {
+            int laneW = getWidth() / LANES;
+            g.setColor(Color.LIGHT_GRAY);
+            g.setStroke(new BasicStroke(
                     2,
                     BasicStroke.CAP_BUTT,
                     BasicStroke.JOIN_BEVEL,
-                    0,
+                    1,
                     new float[] {12, 12},
                     0));
-
-            for (int i = 1; i < 3; i++) {
-                int x = i * laneWidth;
-                g2.drawLine(x, 0, x, getHeight());
+            for (int i = 1; i < LANES; i++) {
+                g.drawLine(i * laneW, 0, i * laneW, getHeight());
             }
         }
 
-        private void drawPlayer(Graphics2D g2) {
-            g2.setColor(Color.GREEN);
-            g2.fillRect(getLaneCenterX(playerLane) - PLAYER_WIDTH / 2, getPlayerY(), PLAYER_WIDTH, PLAYER_HEIGHT);
-        }
-
-        private void drawObstacles(Graphics2D g2) {
-            g2.setColor(Color.RED);
-
-            for (int[] obstacle : obstacles) {
-                int lane = obstacle[0];
-                int y = obstacle[1];
-                int x = getLaneCenterX(lane) - OBSTACLE_WIDTH / 2;
-                g2.fillRect(x, y, OBSTACLE_WIDTH, OBSTACLE_HEIGHT);
+        void drawGameObjects(Graphics2D g) {
+            g.setColor(Color.GREEN);
+            g.fillRect(laneX(playerLane, PLAYER_W), playerY(), PLAYER_W, PLAYER_H);
+            g.setColor(Color.RED);
+            for (int[] obs : obstacles) {
+                g.fillRect(laneX(obs[0], OBS_W), obs[1], OBS_W, OBS_H);
             }
         }
 
-        private void drawScore(Graphics2D g2) {
-            g2.setColor(Color.WHITE);
-            g2.setFont(new Font("Arial", Font.BOLD, 20));
-            g2.drawString("Score: " + score, 15, 30);
+        void drawScore(Graphics2D g) {
+            g.setColor(Color.WHITE);
+            g.setFont(new Font("Arial", Font.BOLD, 20));
+            g.drawString("Score: " + score, 15, 30);
         }
 
-        private void drawLeaderboard(Graphics2D g2) {
-            int panelWidth = 185;
-            int panelHeight = 128;
-            int panelX = getWidth() - panelWidth - 10;
-            int panelY = 10;
-
-            g2.setColor(new Color(0, 0, 0, 155));
-            g2.fillRoundRect(panelX, panelY, panelWidth, panelHeight, 8, 8);
-
-            g2.setFont(new Font("SansSerif", Font.BOLD, 14));
-            g2.setColor(new Color(255, 215, 0));
-            g2.drawString("\uD83C\uDFC6 LEADERBOARD", panelX + 10, panelY + 22);
-
-            g2.setColor(Color.WHITE);
-            g2.setFont(new Font("Arial", Font.PLAIN, 14));
-
-            for (int i = 0; i < 5; i++) {
-                String name = "---";
-                String entryScore = "0";
-
-                if (i < leaderboard.size()) {
-                    String[] entry = leaderboard.get(i);
-                    name = entry[0];
-                    entryScore = entry[1];
-                }
-
-                String line = "#" + (i + 1) + "  " + name + "  " + entryScore;
-                g2.drawString(line, panelX + 10, panelY + 46 + i * 18);
+        void drawLeaderboard(Graphics2D g) {
+            int x = getWidth() - 195;
+            g.setColor(new Color(0, 0, 0, 155));
+            g.fillRoundRect(x, 10, 185, 128, 8, 8);
+            g.setFont(new Font("Segoe UI Emoji", Font.BOLD, 14));
+            g.setColor(GOLD);
+            g.drawString("\uD83C\uDFC6 LEADERBOARD", x + 10, 32);
+            g.setFont(new Font("Arial", Font.PLAIN, 14));
+            g.setColor(Color.WHITE);
+            for (int i = 0; i < TOP_LIMIT; i++) {
+                g.drawString(rankLine(i), x + 10, 56 + i * 18);
             }
         }
 
-        private void drawGameOver(Graphics2D g2) {
-            String gameOverText = "GAME OVER";
-            String finalScoreText = "Final Score: " + score;
-            String restartText = "Press R to Restart";
-            String inputPrompt = "Enter your name:";
+        String rankLine(int i) {
+            if (i >= leaderboard.size()) return "#" + (i + 1) + "  ---  0";
+            ScoreEntry entry = leaderboard.get(i);
+            return "#" + (i + 1) + "  " + entry.name + "  " + entry.score;
+        }
 
-            g2.setFont(new Font("Arial", Font.BOLD, 36));
-            FontMetrics gameOverMetrics = g2.getFontMetrics();
-            int gameOverX = (getWidth() - gameOverMetrics.stringWidth(gameOverText)) / 2;
-            int gameOverY = getHeight() / 2 - 40;
-
-            g2.setColor(Color.RED);
-            g2.drawString(gameOverText, gameOverX, gameOverY);
-
-            g2.setColor(Color.WHITE);
-            g2.setFont(new Font("Arial", Font.BOLD, 20));
-            FontMetrics messageMetrics = g2.getFontMetrics();
-
-            int scoreX = (getWidth() - messageMetrics.stringWidth(finalScoreText)) / 2;
-
-            g2.drawString(finalScoreText, scoreX, gameOverY + 45);
-
-            if (scoreSubmitted) {
-                int restartX = (getWidth() - messageMetrics.stringWidth(restartText)) / 2;
-                g2.drawString(restartText, restartX, gameOverY + 85);
-            } else {
-                int promptX = (getWidth() - messageMetrics.stringWidth(inputPrompt)) / 2;
-                g2.drawString(inputPrompt, promptX, gameOverY + 85);
-
-                if (!nameErrorMessage.isEmpty()) {
-                    g2.setColor(new Color(255, 190, 190));
-                    g2.setFont(new Font("Arial", Font.BOLD, 14));
-                    FontMetrics errorMetrics = g2.getFontMetrics();
-                    int errorX = (getWidth() - errorMetrics.stringWidth(nameErrorMessage)) / 2;
-                    g2.drawString(nameErrorMessage, errorX, getHeight() / 2 + 125);
-                }
+        void drawGameOver(Graphics2D g) {
+            center(g, "GAME OVER", 36, Color.RED, 245);
+            center(g, "Final Score: " + score, 20, Color.WHITE, 290);
+            if (!submitted) {
+                center(g, "Enter your name:", 20, Color.WHITE, 330);
+                center(g, error, 14, new Color(255, 190, 190), 445);
             }
+            center(g, "Press R to Restart", 16, Color.WHITE, 470);
+            center(g, "Press H for Home", 16, Color.WHITE, 495);
         }
 
-        private int getLaneCenterX(int laneIndex) {
-            int laneWidth = getWidth() / 3;
-            return laneIndex * laneWidth + laneWidth / 2;
+        void center(Graphics2D g, String text, int size, Color color, int y) {
+            g.setFont(new Font("Arial", Font.BOLD, size));
+            g.setColor(color);
+            g.drawString(text, (getWidth() - g.getFontMetrics().stringWidth(text)) / 2, y);
         }
 
-        private int getPlayerY() {
-            return getHeight() - PLAYER_BOTTOM_MARGIN - PLAYER_HEIGHT;
+        int laneX(int lane, int width) {
+            int laneW = getWidth() / LANES;
+            return lane * laneW + laneW / 2 - width / 2;
         }
 
-        @Override
-        public void keyPressed(KeyEvent event) {
-            int keyCode = event.getKeyCode();
-
-            if (keyCode == KeyEvent.VK_LEFT && !gameOver) {
-                playerLane = Math.max(0, playerLane - 1);
-            } else if (keyCode == KeyEvent.VK_RIGHT && !gameOver) {
-                playerLane = Math.min(2, playerLane + 1);
-            } else if (keyCode == KeyEvent.VK_R && (!gameOver || scoreSubmitted)) {
-                restartGame();
-            }
+        int playerY() {
+            return getHeight() - 130;
         }
 
-        @Override
-        public void keyReleased(KeyEvent event) {
+        public void keyPressed(KeyEvent e) {
+            int key = e.getKeyCode();
+            if (key == KeyEvent.VK_LEFT && !gameOver) playerLane = Math.max(0, playerLane - 1);
+            if (key == KeyEvent.VK_RIGHT && !gameOver) playerLane = Math.min(LANES - 1, playerLane + 1);
+            if (key == KeyEvent.VK_R && gameOver) { reset(); timer.start(); }
+            if (key == KeyEvent.VK_H && gameOver) showHome();
         }
 
-        @Override
-        public void keyTyped(KeyEvent event) {
+        public void keyReleased(KeyEvent e) {}
+        public void keyTyped(KeyEvent e) {}
+    }
+
+    static class ScoreEntry {
+        String name;
+        int score;
+
+        ScoreEntry(String name, int score) {
+            this.name = name;
+            this.score = score;
+        }
+    }
+
+    static class NameFilter extends DocumentFilter {
+        public void insertString(FilterBypass fb, int off, String text, AttributeSet attr)
+                throws BadLocationException {
+            replace(fb, off, 0, text, attr);
         }
 
-        class NameLengthFilter extends DocumentFilter {
-            @Override
-            public void insertString(FilterBypass fb, int offset, String text, AttributeSet attributes)
-                    throws BadLocationException {
-                if (text == null) {
-                    return;
-                }
-
-                int availableCharacters = MAX_NAME_LENGTH - fb.getDocument().getLength();
-                if (availableCharacters <= 0) {
-                    return;
-                }
-
-                String insertedText = text.substring(0, Math.min(text.length(), availableCharacters));
-                super.insertString(fb, offset, insertedText, attributes);
-            }
-
-            @Override
-            public void replace(FilterBypass fb, int offset, int length, String text, AttributeSet attributes)
-                    throws BadLocationException {
-                if (text == null) {
-                    return;
-                }
-
-                int currentLength = fb.getDocument().getLength();
-                int availableCharacters = MAX_NAME_LENGTH - (currentLength - length);
-                if (availableCharacters <= 0) {
-                    return;
-                }
-
-                String replacementText = text.substring(0, Math.min(text.length(), availableCharacters));
-                super.replace(fb, offset, length, replacementText, attributes);
-            }
+        public void replace(FilterBypass fb, int off, int len, String text, AttributeSet attr)
+                throws BadLocationException {
+            if (text == null) return;
+            int space = MAX_NAME - (fb.getDocument().getLength() - len);
+            String accepted = text.substring(0, Math.min(text.length(), Math.max(space, 0)));
+            super.replace(fb, off, len, accepted, attr);
         }
     }
 }
