@@ -12,7 +12,9 @@ public class SubwaySurferGame extends JFrame {
     static final int SPEED = 5, FPS = 16, MAX_NAME = 15, TOP_LIMIT = 5;
     static final Color BG = new Color(0x2b2b2b), GOLD = new Color(0xFFD700);
 
-    static ArrayList<ScoreEntry> leaderboard = new ArrayList<>();
+    private final PlayerDAO playerDAO = new PlayerDAO();
+    private final ScoreDAO scoreDAO = new ScoreDAO();
+    private final ArrayList<ScoreEntry> leaderboard = new ArrayList<>();
 
     CardLayout cards = new CardLayout();
     JPanel root = new JPanel(cards);
@@ -28,6 +30,7 @@ public class SubwaySurferGame extends JFrame {
         setContentPane(root);
         pack();
         setLocationRelativeTo(null);
+        refreshLeaderboard();
         showHome();
     }
 
@@ -35,34 +38,46 @@ public class SubwaySurferGame extends JFrame {
         SwingUtilities.invokeLater(() -> new SubwaySurferGame().setVisible(true));
     }
 
+    void refreshLeaderboard() {
+        leaderboard.clear();
+        leaderboard.addAll(scoreDAO.getTopScores(TOP_LIMIT));
+    }
+
     void showHome() {
         game.stop();
+        refreshLeaderboard();
         home.refreshBest();
         cards.show(root, "HOME");
     }
 
     void showGame() {
+        refreshLeaderboard();
         cards.show(root, "GAME");
         game.start();
         SwingUtilities.invokeLater(game::requestFocusInWindow);
     }
 
-    static void saveScore(String name, int score) {
-        leaderboard.add(new ScoreEntry(name, score));
-        leaderboard.sort((a, b) -> b.score - a.score);
-        while (leaderboard.size() > TOP_LIMIT) {
-            leaderboard.remove(leaderboard.size() - 1);
+    boolean saveScoreToDatabase(String name, int score, int distance, int playTime) {
+        int playerId = playerDAO.findOrCreatePlayer(name);
+        if (playerId == -1) {
+            return false;
         }
+
+        boolean saved = scoreDAO.saveScore(playerId, score, distance, playTime);
+        if (saved) {
+            refreshLeaderboard();
+        }
+        return saved;
     }
 
     class HomePanel extends JPanel {
-        String bestText = "\uD83C\uDFC6 No records yet. Be the first!";
+        String bestText = "🏆 No records yet. Be the first!";
 
         HomePanel() {
             setPreferredSize(new Dimension(W, H));
             setBackground(BG);
             setLayout(null);
-            add(button("\u25B6  PLAY", 340, new Color(0x4CAF50), new Color(0x66BB6A), e -> showGame()));
+            add(button("▶  PLAY", 340, new Color(0x4CAF50), new Color(0x66BB6A), e -> showGame()));
             add(button("EXIT", 410, new Color(0xD32F2F), new Color(0xEF5350), e -> System.exit(0)));
         }
 
@@ -83,10 +98,10 @@ public class SubwaySurferGame extends JFrame {
 
         void refreshBest() {
             if (leaderboard.isEmpty()) {
-                bestText = "\uD83C\uDFC6 No records yet. Be the first!";
+                bestText = "🏆 No records yet. Be the first!";
             } else {
                 ScoreEntry best = leaderboard.get(0);
-                bestText = "\uD83C\uDFC6 Best: " + best.name + " - " + best.score;
+                bestText = "🏆 Best: " + best.getName() + " - " + best.getScore();
             }
             repaint();
         }
@@ -95,7 +110,7 @@ public class SubwaySurferGame extends JFrame {
             super.paintComponent(gr);
             Graphics2D g = (Graphics2D) gr;
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            center(g, "\uD83D\uDE9B SUBWAY TRUCK", 48, GOLD, 120);
+            center(g, "🚛 SUBWAY TRUCK", 48, GOLD, 120);
             center(g, "How far can you go?", 16, Color.LIGHT_GRAY, 155);
             center(g, bestText, 14, Color.WHITE, 655);
         }
@@ -108,7 +123,7 @@ public class SubwaySurferGame extends JFrame {
     }
 
     class GamePanel extends JPanel implements KeyListener {
-        int playerLane = 1, score = 0, tick = 0, nextSpawn = 70;
+        int playerLane = 1, score = 0, tick = 0, nextSpawn = 70, distance = 0;
         boolean gameOver = false, submitted = false;
         String error = "";
         Random random = new Random();
@@ -131,8 +146,10 @@ public class SubwaySurferGame extends JFrame {
             nameField.setHorizontalAlignment(JTextField.CENTER);
             ((AbstractDocument) nameField.getDocument()).setDocumentFilter(new NameFilter());
             nameField.addActionListener(e -> submitScore());
+
             submit.setBounds(150, 390, 100, 30);
             submit.addActionListener(e -> submitScore());
+
             add(nameField);
             add(submit);
             hideInput();
@@ -150,9 +167,12 @@ public class SubwaySurferGame extends JFrame {
 
         void reset() {
             playerLane = 1;
-            score = tick = 0;
+            score = 0;
+            tick = 0;
+            distance = 0;
             nextSpawn = spawnDelay();
-            gameOver = submitted = false;
+            gameOver = false;
+            submitted = false;
             error = "";
             obstacles.clear();
             hideInput();
@@ -162,10 +182,13 @@ public class SubwaySurferGame extends JFrame {
         void update() {
             score++;
             tick++;
+            distance += SPEED;
+
             if (tick >= nextSpawn) {
-                obstacles.add(new int[] {random.nextInt(LANES), -OBS_H});
+                obstacles.add(new int[] { random.nextInt(LANES), -OBS_H });
                 nextSpawn = tick + spawnDelay();
             }
+
             moveObstacles();
             checkCollision();
             repaint();
@@ -209,13 +232,21 @@ public class SubwaySurferGame extends JFrame {
 
         void submitScore() {
             if (submitted) return;
+
             String name = nameField.getText().trim();
             if (name.isEmpty()) {
                 error = "Name cannot be empty";
                 repaint();
                 return;
             }
-            saveScore(name, score);
+
+            boolean saved = saveScoreToDatabase(name, score, distance, tick);
+            if (!saved) {
+                error = "Failed to save score";
+                repaint();
+                return;
+            }
+
             submitted = true;
             error = "";
             hideInput();
@@ -257,6 +288,7 @@ public class SubwaySurferGame extends JFrame {
         void drawGameObjects(Graphics2D g) {
             g.setColor(Color.GREEN);
             g.fillRect(laneX(playerLane, PLAYER_W), playerY(), PLAYER_W, PLAYER_H);
+
             g.setColor(Color.RED);
             for (int[] obs : obstacles) {
                 g.fillRect(laneX(obs[0], OBS_W), obs[1], OBS_W, OBS_H);
@@ -273,9 +305,11 @@ public class SubwaySurferGame extends JFrame {
             int x = getWidth() - 195;
             g.setColor(new Color(0, 0, 0, 155));
             g.fillRoundRect(x, 10, 185, 128, 8, 8);
+
             g.setFont(new Font("Segoe UI Emoji", Font.BOLD, 14));
             g.setColor(GOLD);
-            g.drawString("\uD83C\uDFC6 LEADERBOARD", x + 10, 32);
+            g.drawString("🏆 LEADERBOARD", x + 10, 32);
+
             g.setFont(new Font("Arial", Font.PLAIN, 14));
             g.setColor(Color.WHITE);
             for (int i = 0; i < TOP_LIMIT; i++) {
@@ -286,7 +320,7 @@ public class SubwaySurferGame extends JFrame {
         String rankLine(int i) {
             if (i >= leaderboard.size()) return "#" + (i + 1) + "  ---  0";
             ScoreEntry entry = leaderboard.get(i);
-            return "#" + (i + 1) + "  " + entry.name + "  " + entry.score;
+            return "#" + (i + 1) + "  " + entry.getName() + "  " + entry.getScore();
         }
 
         void drawGameOver(Graphics2D g) {
@@ -325,16 +359,6 @@ public class SubwaySurferGame extends JFrame {
 
         public void keyReleased(KeyEvent e) {}
         public void keyTyped(KeyEvent e) {}
-    }
-
-    static class ScoreEntry {
-        String name;
-        int score;
-
-        ScoreEntry(String name, int score) {
-            this.name = name;
-            this.score = score;
-        }
     }
 
     static class NameFilter extends DocumentFilter {
