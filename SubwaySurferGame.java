@@ -20,17 +20,17 @@ public class SubwaySurferGame extends JFrame {
     static final int OBS_W = 16 * SCALE;
     static final int OBS_H = 32 * SCALE;
     static final int SPEED = 5, FPS = 16, MAX_NAME = 15, TOP_LIMIT = 5;
-    static final int SAFE_MARGIN = 16;
+    static final int SAFE_MARGIN = 0;
     static final Color BG = new Color(0x1f1f1f);
     static final Color ROAD = new Color(0x272727);
     static final Color LANE_LINE = new Color(0x6f6f6f);
     static final Color PANEL_BG = new Color(0, 0, 0, 170);
     static final Color GOLD = new Color(0xFFD700);
-    static final Font FONT_TITLE = new Font("Segoe UI Emoji", Font.BOLD, 36);
-    static final Font FONT_SUBTITLE = new Font("Segoe UI", Font.PLAIN, 13);
-    static final Font FONT_BODY = new Font("Segoe UI", Font.PLAIN, 12);
-    static final Font FONT_HEADLINE = new Font("Segoe UI", Font.BOLD, 14);
-    static final Font FONT_SMALL = new Font("Segoe UI", Font.PLAIN, 10);
+    static final Font FONT_TITLE = new Font("Segoe UI Emoji", Font.BOLD, 32);
+    static final Font FONT_SUBTITLE = new Font("Segoe UI", Font.PLAIN, 20);
+    static final Font FONT_BODY = new Font("Segoe UI", Font.PLAIN, 16);
+    static final Font FONT_HEADLINE = new Font("Segoe UI", Font.BOLD, 20);
+    static final Font FONT_SMALL = new Font("Segoe UI", Font.PLAIN, 12);
     static final int ROAD_SCALE = 8;
     static final int ROAD_W = 80 * ROAD_SCALE;
     static final int ROAD_H = 16 * ROAD_SCALE;
@@ -111,9 +111,9 @@ public class SubwaySurferGame extends JFrame {
             bottom.setOpaque(false);
             bottom.setBorder(BorderFactory.createEmptyBorder(0, 16, SAFE_MARGIN + 4, 16));
             bottom.add(Box.createRigidArea(new Dimension(0, 8)));
-            bottom.add(button("▶ PLAY", new Color(0x4CAF50), new Color(0x66BB6A), e -> showGame()));
+            bottom.add(button("PLAY", new Color(0x4CAF50), new Color(0x66BB6A), e -> showGame()));
             bottom.add(Box.createRigidArea(new Dimension(0, 10)));
-            bottom.add(button("⏹ EXIT", new Color(0xD32F2F), new Color(0xEF5350), e -> System.exit(0)));
+            bottom.add(button("EXIT", new Color(0xD32F2F), new Color(0xEF5350), e -> System.exit(0)));
             add(bottom, BorderLayout.SOUTH);
         }
 
@@ -169,10 +169,10 @@ public class SubwaySurferGame extends JFrame {
 
         void refreshBest() {
             if (leaderboard.isEmpty()) {
-                bestText = "🏆 No records yet. Be the first!";
+                bestText = "No records yet. Be the first!";
             } else {
                 ScoreEntry best = leaderboard.get(0);
-                bestText = "🏆 Best: " + best.getName() + " - " + best.getScore();
+                bestText = "Best: " + best.getName() + " - " + best.getScore();
             }
             repaint();
         }
@@ -201,7 +201,7 @@ public class SubwaySurferGame extends JFrame {
             g.setFont(FONT_TITLE);
             Color titleColor = new Color(255, 215, 0, 140 + (int) (95 * titleGlow));
             g.setColor(titleColor);
-            g.drawString("🚛 SUBWAY", (getWidth() - g.getFontMetrics().stringWidth("🚛 SUBWAY")) / 2, 65);
+            g.drawString("SUBWAY TRUCK", (getWidth() - g.getFontMetrics().stringWidth("SUBWAY TRUCK")) / 2, 65);
 
             g.setFont(FONT_SUBTITLE);
             g.setColor(Color.LIGHT_GRAY);
@@ -216,9 +216,9 @@ public class SubwaySurferGame extends JFrame {
 
             g.setFont(FONT_BODY);
             g.setColor(Color.LIGHT_GRAY);
-            g.drawString("🚀 Smooth & fast", left, top + 22);
-            g.drawString("🏆 Permanent scores", left, top + 38);
-            g.drawString("✨ Zero overlap", left, top + 54);
+            g.drawString("Smooth & fast", left, top + 22);
+            g.drawString("Permanent scores", left, top + 38);
+            g.drawString("Zero overlap", left, top + 54);
 
             g.setFont(FONT_HEADLINE);
             g.setColor(GOLD);
@@ -227,11 +227,6 @@ public class SubwaySurferGame extends JFrame {
             g.setFont(FONT_BODY);
             g.setColor(Color.WHITE);
             g.drawString(bestText, left, top + 100);
-            int driveX = SAFE_MARGIN + 20;
-            int driveWidth = getWidth() - SAFE_MARGIN * 2 - 40;
-
-            g.setColor(Color.RED);
-            g.drawRect(driveX, 0, driveWidth, getHeight());
         }
 
         void center(Graphics2D g, String text, int size, Color color, int y) {
@@ -340,7 +335,7 @@ public class SubwaySurferGame extends JFrame {
             submit.setAlignmentX(Component.CENTER_ALIGNMENT);
             
             JLabel inputLabel = new JLabel("Player Name");
-            inputLabel.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            inputLabel.setFont(new Font("Segoe UI", Font.BOLD, 20));
             inputLabel.setForeground(GOLD);
             inputLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
             
@@ -632,7 +627,7 @@ public class SubwaySurferGame extends JFrame {
 
             g.setFont(FONT_SMALL);
             g.setColor(GOLD);
-            g.drawString("🏆 TOP 5", x + 12, SAFE_MARGIN + 22);
+            g.drawString("TOP 5", x + 12, SAFE_MARGIN + 22);
 
             g.setFont(FONT_BODY);
             g.setColor(Color.WHITE);
@@ -681,16 +676,16 @@ public class SubwaySurferGame extends JFrame {
             g.setStroke(new BasicStroke(2f));
             g.drawRoundRect(x, y, width, height, 20, 20);
 
-            center(g, "🎮 GAME OVER", 26, new Color(255, 100, 100), y + 40);
-            center(g, "Score: " + score, 16, GOLD, y + 70);
-            center(g, "Distance: " + distance + "m", 12, Color.WHITE, y + 88);
+            center(g, "GAME OVER", 32, new Color(255, 100, 100), y + 40);
+            center(g, "Score: " + score, 20, GOLD, y + 70);
+            center(g, "Distance: " + distance + "m", 16, Color.WHITE, y + 88);
             
             if (!submitted) {
-                center(g, "Save your score below", 11, Color.LIGHT_GRAY, y + 110);
+                center(g, "Save your score below", 16, Color.LIGHT_GRAY, y + 110);
             } else {
-                center(g, "✓ Score saved!", 16, new Color(100, 255, 100), y + 110);
+                center(g, "Score saved!", 20, new Color(100, 255, 100), y + 110);
             }
-            center(g, "R:Restart  H:Home", 10, Color.LIGHT_GRAY, y + height - 20);
+            center(g, "R:Restart  H:Home", 16, Color.LIGHT_GRAY, y + height - 20);
         }
 
         void center(Graphics2D g, String text, int size, Color color, int y) {
@@ -715,7 +710,7 @@ public class SubwaySurferGame extends JFrame {
         }
 
         int playerY() {
-            return getHeight() - 115;
+            return getHeight() - 260;
         }
 
         public void keyPressed(KeyEvent e) {
