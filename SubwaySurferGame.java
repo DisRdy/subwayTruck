@@ -5,12 +5,22 @@ import java.util.Iterator;
 import java.util.Random;
 import javax.swing.*;
 import javax.swing.text.*;
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
 
 public class SubwaySurferGame extends JFrame {
-    static final int W = 360, H = 640, LANES = 3;
-    static final int PLAYER_W = 35, PLAYER_H = 50, OBS_W = 35, OBS_H = 45;
+    static final int W = 450, H = 800, LANES = 3;
+    static final int SCALE = 6;
+
+    static final int PLAYER_W = 16 * SCALE;
+    static final int PLAYER_H = 32 * SCALE;
+
+    static final int OBS_W = 16 * SCALE;
+    static final int OBS_H = 32 * SCALE;
     static final int SPEED = 5, FPS = 16, MAX_NAME = 15, TOP_LIMIT = 5;
-    static final int SAFE_MARGIN = 12;
+    static final int SAFE_MARGIN = 16;
     static final Color BG = new Color(0x1f1f1f);
     static final Color ROAD = new Color(0x272727);
     static final Color LANE_LINE = new Color(0x6f6f6f);
@@ -21,6 +31,11 @@ public class SubwaySurferGame extends JFrame {
     static final Font FONT_BODY = new Font("Segoe UI", Font.PLAIN, 12);
     static final Font FONT_HEADLINE = new Font("Segoe UI", Font.BOLD, 14);
     static final Font FONT_SMALL = new Font("Segoe UI", Font.PLAIN, 10);
+    static final int ROAD_SCALE = 8;
+    static final int ROAD_W = 80 * ROAD_SCALE;
+    static final int ROAD_H = 16 * ROAD_SCALE;
+    static final int ROAD_GRASS_LEFT = 80;
+    static final int ROAD_GRASS_RIGHT = 80;
 
     private final PlayerDAO playerDAO = new PlayerDAO();
     private final ScoreDAO scoreDAO = new ScoreDAO();
@@ -212,6 +227,11 @@ public class SubwaySurferGame extends JFrame {
             g.setFont(FONT_BODY);
             g.setColor(Color.WHITE);
             g.drawString(bestText, left, top + 100);
+            int driveX = SAFE_MARGIN + 20;
+            int driveWidth = getWidth() - SAFE_MARGIN * 2 - 40;
+
+            g.setColor(Color.RED);
+            g.drawRect(driveX, 0, driveWidth, getHeight());
         }
 
         void center(Graphics2D g, String text, int size, Color color, int y) {
@@ -234,6 +254,10 @@ public class SubwaySurferGame extends JFrame {
         JTextField nameField = new JTextField();
         JPanel inputPanel;
         JButton submit = new JButton("Submit");
+        BufferedImage truckImg;
+        BufferedImage[] carImgs = new BufferedImage[3];
+        BufferedImage[] roadTiles = new BufferedImage[2];
+        double roadOffset = 0;
 
         GamePanel() {
             setPreferredSize(new Dimension(W, H));
@@ -241,6 +265,20 @@ public class SubwaySurferGame extends JFrame {
             setLayout(new BorderLayout());
             setFocusable(true);
             addKeyListener(this);
+
+            try {
+                truckImg = ImageIO.read(new File("res/truck.png"));
+
+                carImgs[0] = ImageIO.read(new File("res/cars1.png"));
+                carImgs[1] = ImageIO.read(new File("res/cars2.png"));
+                carImgs[2] = ImageIO.read(new File("res/cars3.png"));
+
+                roadTiles[0] = ImageIO.read(new File("res/road1.png"));
+                roadTiles[1] = ImageIO.read(new File("res/road2.png"));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
             fadeTimer.setRepeats(true);
             setupInput();
         }
@@ -363,8 +401,22 @@ public class SubwaySurferGame extends JFrame {
             int currentSpeed = getProgressiveSpeed();
             distance += currentSpeed;
 
+            roadOffset += currentSpeed*0.3;
+
+            if (roadOffset >= ROAD_H) {
+                roadOffset -= ROAD_H;
+            }
+
             if (tick >= nextSpawn) {
-                obstacles.add(new int[] { random.nextInt(LANES), -OBS_H });
+                int sprite = random.nextInt(carImgs.length);
+
+                obstacles.add(
+                    new int[] {
+                        random.nextInt(LANES),
+                        -OBS_H,
+                        sprite
+                    }
+                );
                 nextSpawn = tick + spawnDelay();
             }
 
@@ -398,11 +450,24 @@ public class SubwaySurferGame extends JFrame {
         }
 
         void checkCollision() {
-            int playerY = playerY();
+
+            Rectangle playerHitbox = new Rectangle(
+                laneX(playerLane, PLAYER_W) + 15,
+                playerY() + 20,
+                PLAYER_W - 30,
+                PLAYER_H - 80
+            );
+
             for (int[] obs : obstacles) {
-                boolean sameLane = obs[0] == playerLane;
-                boolean sameY = obs[1] + OBS_H >= playerY && obs[1] <= playerY + PLAYER_H;
-                if (sameLane && sameY) {
+
+                Rectangle obstacleHitbox = new Rectangle(
+                    laneX(obs[0], OBS_W) + 15,
+                    obs[1] + 20,
+                    OBS_W - 30,
+                    OBS_H - 90
+                );
+
+                if (playerHitbox.intersects(obstacleHitbox)) {
                     endGame();
                     return;
                 }
@@ -474,8 +539,31 @@ public class SubwaySurferGame extends JFrame {
         }
 
         void drawRoad(Graphics2D g) {
-            g.setColor(ROAD);
-            g.fillRoundRect(SAFE_MARGIN, SAFE_MARGIN, getWidth() - SAFE_MARGIN * 2, getHeight() - SAFE_MARGIN * 2, 32, 32);
+            g.setRenderingHint(
+                RenderingHints.KEY_INTERPOLATION,
+                RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR
+            );
+
+            int roadWidth = getWidth() - SAFE_MARGIN * 2;
+
+            for (int y = -(int) roadOffset;
+                y < getHeight();
+                y += ROAD_H) {
+
+                int index = Math.floorDiv(y, ROAD_H);
+
+                BufferedImage tile =
+                    roadTiles[Math.abs(index) % roadTiles.length];
+
+                g.drawImage(
+                    tile,
+                    SAFE_MARGIN,
+                    y,
+                    roadWidth,
+                    ROAD_H,
+                    null
+                );
+            }
         }
 
         void drawLanes(Graphics2D g) {
@@ -495,22 +583,29 @@ public class SubwaySurferGame extends JFrame {
         }
 
         void drawGameObjects(Graphics2D g) {
-            g.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 40));
-            g.setColor(Color.WHITE);
-            
-            // Draw player truck
-            String truck = "🚛";
-            FontMetrics fm = g.getFontMetrics();
-            int truckX = laneX(playerLane, PLAYER_W) + PLAYER_W / 2 - fm.stringWidth(truck) / 2;
-            int truckY = playerY() + PLAYER_H / 2 + fm.getAscent() / 2;
-            g.drawString(truck, truckX, truckY);
+            // Player
+            int playerX = laneX(playerLane, PLAYER_W);
+            int playerY = playerY();
 
-            // Draw obstacle cars
-            String car = "🚗";
+            g.drawImage(
+                truckImg,
+                playerX,
+                playerY,
+                PLAYER_W,
+                PLAYER_H,
+                null
+            );
+
+            // Obstacles
             for (int[] obs : obstacles) {
-                int carX = laneX(obs[0], OBS_W) + OBS_W / 2 - fm.stringWidth(car) / 2;
-                int carY = obs[1] + OBS_H / 2 + fm.getAscent() / 2;
-                g.drawString(car, carX, carY);
+                g.drawImage(
+                    carImgs[obs[2]],
+                    laneX(obs[0], OBS_W),
+                    obs[1],
+                    OBS_W,
+                    OBS_H,
+                    null
+                );
             }
         }
 
@@ -605,8 +700,18 @@ public class SubwaySurferGame extends JFrame {
         }
 
         int laneX(int lane, int width) {
-            int laneW = (getWidth() - SAFE_MARGIN * 2) / LANES;
-            return SAFE_MARGIN + lane * laneW + laneW / 2 - width / 2;
+
+            int roadX = SAFE_MARGIN;
+            int roadWidth = getWidth() - SAFE_MARGIN * 2;
+
+            // Amount of grass on each side in your sprite
+
+            int driveX = roadX + ROAD_GRASS_LEFT;
+            int driveWidth = roadWidth - ROAD_GRASS_LEFT - ROAD_GRASS_RIGHT;
+
+            int laneW = driveWidth / LANES;
+
+            return driveX + lane * laneW + laneW / 2 - width / 2;
         }
 
         int playerY() {
