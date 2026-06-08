@@ -2,21 +2,29 @@
 
 Subway Truck adalah game sederhana berbasis Java Swing. Game ini memakai mekanisme 3 lane seperti endless runner: player berada di bawah layar dan harus menghindari obstacle merah yang turun dari atas.
 
-Game ini tidak memakai database dan tidak membutuhkan library eksternal. Semua data leaderboard hanya disimpan sementara di memori.
+Game ini kini terhubung ke database MySQL untuk menyimpan leaderboard secara permanen. Koneksi database otomatis membuat schema `subway_truck` beserta tabel `player` dan `score` saat aplikasi dijalankan.
+
+## Persyaratan
+
+- MySQL server berjalan di `localhost:3306`
+- JDBC driver MySQL Connector/J tersedia di classpath
+- Jika Anda menggunakan password non-kosong untuk user `root`, ubah `DBConnection.java`
 
 ## Cara Menjalankan
 
 Compile:
 
 ```powershell
-javac SubwaySurferGame.java
+javac -cp .;mysql-connector-java-8.0.33.jar *.java
 ```
 
 Run:
 
 ```powershell
-java SubwaySurferGame
+java -cp .;mysql-connector-java-8.0.33.jar SubwaySurferGame
 ```
+
+> Jika Anda menggunakan versi Connector/J yang berbeda, ganti nama JAR di perintah di atas.
 
 ## Fitur Utama
 
