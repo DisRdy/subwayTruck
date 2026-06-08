@@ -9,6 +9,7 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import javax.sound.sampled.*;
 
 public class SubwaySurferGame extends JFrame {
     static final int W = 450, H = 800, LANES = 3;
@@ -38,6 +39,8 @@ public class SubwaySurferGame extends JFrame {
     static final int ROAD_GRASS_RIGHT = 80;
 
     private final PlayerDAO playerDAO = new PlayerDAO();
+    Clip menuMusic;
+    Clip gameMusic;
     private final ScoreDAO scoreDAO = new ScoreDAO();
     private final ArrayList<ScoreEntry> leaderboard = new ArrayList<>();
 
@@ -46,6 +49,40 @@ public class SubwaySurferGame extends JFrame {
     HomePanel home = new HomePanel();
     GamePanel game = new GamePanel();
 
+    Clip loadClip(String path) {
+
+        try {
+
+            AudioInputStream audio =
+                AudioSystem.getAudioInputStream(
+                    new File(path)
+                );
+
+            Clip clip =
+                AudioSystem.getClip();
+
+            clip.open(audio);
+
+            return clip;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return null;
+    }
+void setVolume(Clip clip, float db) {
+
+    if (clip == null)
+        return;
+
+    FloatControl volume =
+        (FloatControl) clip.getControl(
+            FloatControl.Type.MASTER_GAIN
+        );
+
+    volume.setValue(db);
+}
     public SubwaySurferGame() {
         setTitle("Subway Truck");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -55,10 +92,46 @@ public class SubwaySurferGame extends JFrame {
         setContentPane(root);
         pack();
         setLocationRelativeTo(null);
+        menuMusic =
+            loadClip("res/mainmenu.wav");
+
+        gameMusic =
+            loadClip("res/background.wav");
+        setVolume(menuMusic, -0f);
+        setVolume(gameMusic, -10f);
         refreshLeaderboard();
         showHome();
+        playMenuMusic();
+        
     }
+    void stopAllMusic() {
 
+        if (menuMusic != null)
+            menuMusic.stop();
+
+        if (gameMusic != null)
+            gameMusic.stop();
+    }
+    void playMenuMusic() {
+
+        stopAllMusic();
+
+        if (menuMusic != null) {
+
+            menuMusic.setFramePosition(0);
+            menuMusic.loop(Clip.LOOP_CONTINUOUSLY);
+        }
+    }
+    void playGameMusic() {
+
+        stopAllMusic();
+
+        if (gameMusic != null) {
+
+            gameMusic.setFramePosition(0);
+            gameMusic.loop(Clip.LOOP_CONTINUOUSLY);
+        }
+    }
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new SubwaySurferGame().setVisible(true));
     }
@@ -73,6 +146,7 @@ public class SubwaySurferGame extends JFrame {
         refreshLeaderboard();
         home.refreshBest();
         cards.show(root, "HOME");
+        playMenuMusic();
     }
 
     void showGame() {
@@ -80,6 +154,8 @@ public class SubwaySurferGame extends JFrame {
         cards.show(root, "GAME");
         game.start();
         SwingUtilities.invokeLater(game::requestFocusInWindow);
+        playGameMusic();
+
     }
 
     boolean saveScoreToDatabase(String name, int score, int distance, int playTime) {
@@ -96,7 +172,7 @@ public class SubwaySurferGame extends JFrame {
     }
 
     class HomePanel extends JPanel {
-        String bestText = "🏆 No records yet. Be the first!";
+        String bestText = "No records yet. Be the first!";
         float titleGlow = 0.6f;
         boolean glowIncreasing = true;
         Timer animator = new Timer(40, e -> animateHome());
@@ -237,6 +313,7 @@ public class SubwaySurferGame extends JFrame {
     }
 
     class GamePanel extends JPanel implements KeyListener {
+        int nextMilestone = 1000;
         int playerLane = 1, score = 0, tick = 0, nextSpawn = 70, distance = 0;
         boolean gameOver = false, submitted = false;
         String error = "";
@@ -253,7 +330,8 @@ public class SubwaySurferGame extends JFrame {
         BufferedImage[] carImgs = new BufferedImage[3];
         BufferedImage[] roadTiles = new BufferedImage[2];
         double roadOffset = 0;
-
+        String toastText = "";
+        int toastTimer = 0;
         GamePanel() {
             setPreferredSize(new Dimension(W, H));
             setBackground(BG);
@@ -273,7 +351,6 @@ public class SubwaySurferGame extends JFrame {
             } catch (IOException e) {
                 e.printStackTrace();
             }
-
             fadeTimer.setRepeats(true);
             setupInput();
         }
@@ -389,9 +466,18 @@ public class SubwaySurferGame extends JFrame {
             hideInput();
             repaint();
         }
-
         void update() {
             score++;
+            if (score >= nextMilestone) {
+
+                playMilestoneSound();
+
+                showToast(
+                    "SCORE " + nextMilestone + "!"
+                );
+
+                nextMilestone += nextMilestone;
+            }
             tick++;
             int currentSpeed = getProgressiveSpeed();
             distance += currentSpeed;
@@ -401,7 +487,9 @@ public class SubwaySurferGame extends JFrame {
             if (roadOffset >= ROAD_H) {
                 roadOffset -= ROAD_H;
             }
-
+            if (toastTimer > 0) {
+                toastTimer--;
+            }
             if (tick >= nextSpawn) {
                 int sprite = random.nextInt(carImgs.length);
 
@@ -419,13 +507,33 @@ public class SubwaySurferGame extends JFrame {
             checkCollision();
             repaint();
         }
-
+        void showToast(String text) {
+            System.out.println("TOAST: " + text);
+            toastText = text;
+            toastTimer = 60;
+        }
         int getProgressiveSpeed() {
             int baseSpeed = SPEED;
             int bonus = (distance / 500);
             return Math.min(baseSpeed + bonus, SPEED + 5);
         }
+        void playMilestoneSound() {
 
+            try {
+
+                AudioInputStream audio =
+                    AudioSystem.getAudioInputStream(
+                        new File("res/milestone.wav")
+                    );
+
+                Clip clip = AudioSystem.getClip();
+                clip.open(audio);
+                clip.start();
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
         int spawnDelay() {
             int baseSeed = 60 + random.nextInt(31);
             int difficultyReduction = (distance / 500) * 5;
@@ -523,13 +631,13 @@ public class SubwaySurferGame extends JFrame {
             GradientPaint background = new GradientPaint(0, 0, new Color(0x121212), 0, getHeight(), BG);
             g.setPaint(background);
             g.fillRect(0, 0, getWidth(), getHeight());
-
             drawRoad(g);
             drawLanes(g);
             drawGameObjects(g);
             drawHUD(g);
             drawLeaderboard(g);
             drawControls(g);
+            drawToast(g);
             if (gameOver) drawGameOver(g);
         }
 
@@ -617,7 +725,65 @@ public class SubwaySurferGame extends JFrame {
             g.drawString("Distance: " + distance, SAFE_MARGIN + 16, SAFE_MARGIN + 52);
             g.drawString("Time: " + (tick / 60) + "s", SAFE_MARGIN + 16, SAFE_MARGIN + 76);
         }
+        void drawToast(Graphics2D g) {
 
+            if (toastTimer <= 0)
+                return;
+
+            float alpha =
+                Math.min(
+                    toastTimer / 20f,
+                    1f
+                );
+
+            Composite old =
+                g.getComposite();
+
+            g.setComposite(
+                AlphaComposite.getInstance(
+                    AlphaComposite.SRC_OVER,
+                    alpha
+                )
+            );
+
+            g.setFont(
+                new Font(
+                    "Segoe UI",
+                    Font.BOLD,
+                    28
+                )
+            );
+
+            FontMetrics fm =
+                g.getFontMetrics();
+
+            int width =
+                fm.stringWidth(
+                    toastText
+                );
+
+            int x =
+                (getWidth() - width) / 2;
+
+            int y =
+                getHeight() / 3;
+
+            g.setColor(
+                new Color(
+                    255,
+                    215,
+                    0
+                )
+            );
+
+            g.drawString(
+                toastText,
+                x,
+                y
+            );
+
+            g.setComposite(old);
+        }
         void drawLeaderboard(Graphics2D g) {
             int x = getWidth() - SAFE_MARGIN - 180;
             g.setColor(PANEL_BG);
