@@ -6,8 +6,8 @@ import java.util.ArrayList;
 
 public class ScoreDAO {
 
-    public boolean saveScore(int playerId, int score, int distance, int playTime) {
-        String sql = "INSERT INTO score (player_id, score, distance, play_time) VALUES (?, ?, ?, ?)";
+    public boolean saveScore(int playerId, int score, int distance, int playTime, int difficulty) {
+        String sql = "INSERT INTO score (player_id, score, distance, play_time, difficulty) VALUES (?, ?, ?, ?,?)";
 
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -16,6 +16,7 @@ public class ScoreDAO {
             ps.setInt(2, score);
             ps.setInt(3, distance);
             ps.setInt(4, playTime);
+            ps.setInt(5, difficulty);
 
             return ps.executeUpdate() > 0;
 
@@ -29,7 +30,7 @@ public class ScoreDAO {
         ArrayList<ScoreEntry> list = new ArrayList<>();
 
         String sql =
-                "SELECT s.score_id, s.player_id, p.username, s.score, s.distance, s.play_time, s.created_at " +
+                "SELECT s.score_id, s.player_id, p.username, s.score, s.distance, s.play_time, s.difficulty, s.created_at " +
                 "FROM score s " +
                 "JOIN player p ON s.player_id = p.player_id " +
                 "ORDER BY s.score DESC, s.created_at ASC " +
@@ -47,6 +48,7 @@ public class ScoreDAO {
                         rs.getInt("score"),
                         rs.getInt("distance"),
                         rs.getInt("play_time"),
+                        rs.getInt("difficulty"),
                         rs.getTimestamp("created_at")
                 ));
             }

@@ -13,9 +13,9 @@ CREATE TABLE IF NOT EXISTS score (
     score INT NOT NULL,
     distance INT NOT NULL DEFAULT 0,
     play_time INT NOT NULL DEFAULT 0,
+    difficulty TINYINT NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_score_player
-        FOREIGN KEY (player_id)
-        REFERENCES player(player_id)
-        ON DELETE CASCADE
+
+    FOREIGN KEY(player_id)
+    REFERENCES player(player_id)
 );

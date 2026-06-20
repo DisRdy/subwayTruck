@@ -158,13 +158,13 @@ void setVolume(Clip clip, float db) {
 
     }
 
-    boolean saveScoreToDatabase(String name, int score, int distance, int playTime) {
+    boolean saveScoreToDatabase(String name, int score, int distance, int playTime,int difficulty) {
         int playerId = playerDAO.findOrCreatePlayer(name);
         if (playerId == -1) {
             return false;
         }
 
-        boolean saved = scoreDAO.saveScore(playerId, score, distance, playTime);
+        boolean saved = scoreDAO.saveScore(playerId, score, distance, playTime,difficulty);
         if (saved) {
             refreshLeaderboard();
         }
@@ -314,6 +314,7 @@ void setVolume(Clip clip, float db) {
 
     class GamePanel extends JPanel implements KeyListener {
         int nextMilestone = 1000;
+        int difficulty = 0;
         int playerLane = 1, score = 0, tick = 0, nextSpawn = 70, distance = 0;
         boolean gameOver = false, submitted = false;
         String error = "";
@@ -355,6 +356,9 @@ void setVolume(Clip clip, float db) {
             setupInput();
         }
 
+        public void setDifficulty(int difficulty) {
+            this.difficulty = difficulty;
+        }
         void setupInput() {
             nameField.setPreferredSize(new Dimension(220, 40));
             nameField.setMaximumSize(new Dimension(280, 40));
@@ -372,6 +376,7 @@ void setVolume(Clip clip, float db) {
             submit.setPreferredSize(new Dimension(200, 40));
             submit.setFont(new Font("Segoe UI", Font.BOLD, 14));
             submit.setForeground(Color.WHITE);
+            
             submit.setBackground(new Color(0x4CAF50));
             submit.setOpaque(true);
             submit.setBorderPainted(true);
@@ -601,7 +606,7 @@ void setVolume(Clip clip, float db) {
                 return;
             }
 
-            boolean saved = saveScoreToDatabase(name, score, distance, tick);
+            boolean saved = saveScoreToDatabase(name, score, distance, tick, difficulty);
             if (!saved) {
                 error = "Failed to save score";
                 repaint();

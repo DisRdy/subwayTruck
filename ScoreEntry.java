@@ -7,9 +7,10 @@ public class ScoreEntry {
     private int score;
     private int distance;
     private int playTime;
+    private int difficulty;
     private Timestamp createdAt;
 
-    public ScoreEntry(int scoreId, int playerId, String name, int score, int distance, int playTime, Timestamp createdAt) {
+    public ScoreEntry(int scoreId, int playerId, String name, int score, int distance, int playTime, int difficulty, Timestamp createdAt) {
         this.scoreId = scoreId;
         this.playerId = playerId;
         this.name = name;
@@ -21,6 +22,10 @@ public class ScoreEntry {
 
     public int getScoreId() {
         return scoreId;
+    }
+
+    public int getDifficulty() {
+    return difficulty;
     }
 
     public int getPlayerId() {
