@@ -325,13 +325,13 @@ void setVolume(Clip clip, float db) {
             int top = 120;
             g.setFont(FONT_HEADLINE);
             g.setColor(Color.WHITE);
-            g.drawString("Why play?", left, top);
+            g.drawString("ABOUT US", left, top);
 
             g.setFont(FONT_BODY);
             g.setColor(Color.LIGHT_GRAY);
-            g.drawString("Smooth & fast", left, top + 22);
-            g.drawString("Permanent scores", left, top + 38);
-            g.drawString("Zero overlap", left, top + 54);
+            g.drawString("Presentasi Dimas/Adit/Disna", left, top + 22);
+            g.drawString("Game Subway Surfer-Like dengan memakai ", left, top + 38);
+            g.drawString("asset original untuk truk dan mobil", left, top + 54);
 
             g.setFont(FONT_HEADLINE);
             g.setColor(GOLD);
@@ -1146,4 +1146,4 @@ void setVolume(Clip clip, float db) {
             super.replace(fb, off, len, accepted, attr);
         }
     }
-}
+} 
