@@ -18,6 +18,7 @@ public class ScoreEntry {
         this.distance = distance;
         this.playTime = playTime;
         this.createdAt = createdAt;
+        this.difficulty = difficulty;
     }
 
     public int getScoreId() {
@@ -50,5 +51,10 @@ public class ScoreEntry {
 
     public Timestamp getCreatedAt() {
         return createdAt;
+    }
+    public String getDifficultyName() {
+        return difficulty == 0
+            ? "Easy"
+            : "Extreme";
     }
 }

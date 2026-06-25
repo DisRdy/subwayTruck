@@ -14,7 +14,7 @@ import javax.sound.sampled.*;
 public class SubwaySurferGame extends JFrame {
     static final int W = 450, H = 800, LANES = 3;
     static final int SCALE = 6;
-
+    
     static final int PLAYER_W = 16 * SCALE;
     static final int PLAYER_H = 32 * SCALE;
 
@@ -48,7 +48,7 @@ public class SubwaySurferGame extends JFrame {
     JPanel root = new JPanel(cards);
     HomePanel home = new HomePanel();
     GamePanel game = new GamePanel();
-
+    int selectedDifficulty = 0;
     Clip loadClip(String path) {
 
         try {
@@ -151,11 +151,19 @@ void setVolume(Clip clip, float db) {
 
     void showGame() {
         refreshLeaderboard();
+
+        game.setDifficulty(
+            selectedDifficulty
+        );
+
         cards.show(root, "GAME");
         game.start();
-        SwingUtilities.invokeLater(game::requestFocusInWindow);
-        playGameMusic();
 
+        SwingUtilities.invokeLater(
+            game::requestFocusInWindow
+        );
+
+        playGameMusic();
     }
 
     boolean saveScoreToDatabase(String name, int score, int distance, int playTime,int difficulty) {
@@ -176,7 +184,7 @@ void setVolume(Clip clip, float db) {
         float titleGlow = 0.6f;
         boolean glowIncreasing = true;
         Timer animator = new Timer(40, e -> animateHome());
-
+        JComboBox<String> difficultyBox;
         HomePanel() {
             setPreferredSize(new Dimension(W, H));
             setBackground(BG);
@@ -187,6 +195,29 @@ void setVolume(Clip clip, float db) {
             bottom.setOpaque(false);
             bottom.setBorder(BorderFactory.createEmptyBorder(0, 16, SAFE_MARGIN + 4, 16));
             bottom.add(Box.createRigidArea(new Dimension(0, 8)));
+            difficultyBox = new JComboBox<>(
+                new String[] {
+                    "Easy",
+                    "Extreme"
+                }
+            );
+
+            difficultyBox.setMaximumSize(
+                new Dimension(220, 40)
+            );
+
+            difficultyBox.setAlignmentX(
+                Component.CENTER_ALIGNMENT
+            );
+
+            difficultyBox.addActionListener(e -> {
+                selectedDifficulty =
+                    difficultyBox.getSelectedIndex();
+            });
+            bottom.add(difficultyBox);
+            bottom.add(Box.createRigidArea(
+                new Dimension(0,10)
+            ));
             bottom.add(button("PLAY", new Color(0x4CAF50), new Color(0x66BB6A), e -> showGame()));
             bottom.add(Box.createRigidArea(new Dimension(0, 10)));
             bottom.add(button("EXIT", new Color(0xD32F2F), new Color(0xEF5350), e -> System.exit(0)));
@@ -248,7 +279,13 @@ void setVolume(Clip clip, float db) {
                 bestText = "No records yet. Be the first!";
             } else {
                 ScoreEntry best = leaderboard.get(0);
-                bestText = "Best: " + best.getName() + " - " + best.getScore();
+                bestText = "Best: "
+                + best.getName()
+                + " - "
+                + best.getScore()
+                + " ["
+                + best.getDifficultyName()
+                + "]";
             }
             repaint();
         }
@@ -320,6 +357,12 @@ void setVolume(Clip clip, float db) {
         String error = "";
         Random random = new Random();
         ArrayList<int[]> obstacles = new ArrayList<>();
+        ArrayList<int[]> coins = new ArrayList<>();
+
+        BufferedImage coinImg;
+
+        int coinCount = 0;
+        int nextCoinSpawn = 100;
         Timer timer = new Timer(FPS, e -> update());
         float fadeAlpha = 0f;
         boolean animatingIn = false;
@@ -349,6 +392,9 @@ void setVolume(Clip clip, float db) {
 
                 roadTiles[0] = ImageIO.read(new File("res/road1.png"));
                 roadTiles[1] = ImageIO.read(new File("res/road2.png"));
+                coinImg = ImageIO.read(
+                    new File("res/coin.png")
+                );
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -461,8 +507,12 @@ void setVolume(Clip clip, float db) {
         void reset() {
             playerLane = 1;
             score = 0;
+            nextMilestone = 1000;
             tick = 0;
             distance = 0;
+            coinCount = 0;
+            coins.clear();
+            nextCoinSpawn = 100;
             nextSpawn = spawnDelay();
             gameOver = false;
             submitted = false;
@@ -472,7 +522,13 @@ void setVolume(Clip clip, float db) {
             repaint();
         }
         void update() {
-            score++;
+            if (difficulty == 0) {
+                score++;
+            } else {
+                if (tick % 2 == 0) {
+                    score++;
+                }
+            }
             if (score >= nextMilestone) {
 
                 playMilestoneSound();
@@ -482,6 +538,17 @@ void setVolume(Clip clip, float db) {
                 );
 
                 nextMilestone += nextMilestone;
+            }
+            if (tick >= nextCoinSpawn) {
+                coins.add(
+                    new int[] {
+                        random.nextInt(LANES),
+                        -50
+                    }
+                );
+
+                nextCoinSpawn =
+                    tick + 80 + random.nextInt(80);
             }
             tick++;
             int currentSpeed = getProgressiveSpeed();
@@ -509,7 +576,9 @@ void setVolume(Clip clip, float db) {
             }
 
             moveObstacles();
+            moveCoins();
             checkCollision();
+            checkCoinCollection();
             repaint();
         }
         void showToast(String text) {
@@ -518,9 +587,23 @@ void setVolume(Clip clip, float db) {
             toastTimer = 60;
         }
         int getProgressiveSpeed() {
-            int baseSpeed = SPEED;
-            int bonus = (distance / 500);
-            return Math.min(baseSpeed + bonus, SPEED + 5);
+
+            int divisor =
+                (difficulty == 1)
+                    ? 1000
+                    : 1500;
+
+            int bonus =
+                distance / divisor;
+
+            int speed =
+                SPEED + bonus;
+
+            if (difficulty == 1) {
+                speed *= 2;
+            }
+
+            return speed;
         }
         void playMilestoneSound() {
 
@@ -532,6 +615,45 @@ void setVolume(Clip clip, float db) {
                     );
 
                 Clip clip = AudioSystem.getClip();
+                clip.open(audio);
+                clip.start();
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        void moveCoins() {
+
+            int currentSpeed =
+                getProgressiveSpeed();
+
+            Iterator<int[]> it =
+                coins.iterator();
+
+            while (it.hasNext()) {
+
+                int[] coin =
+                    it.next();
+
+                coin[1] += currentSpeed;
+
+                if (coin[1] > getHeight()) {
+                    it.remove();
+                }
+            }
+        }
+        void playCoinSound() {
+
+            try {
+
+                AudioInputStream audio =
+                    AudioSystem.getAudioInputStream(
+                        new File("res/coin.wav")
+                    );
+
+                Clip clip =
+                    AudioSystem.getClip();
+
                 clip.open(audio);
                 clip.start();
 
@@ -556,7 +678,50 @@ void setVolume(Clip clip, float db) {
                 }
             }
         }
+        void checkCoinCollection() {
 
+            Rectangle playerHitbox =
+                new Rectangle(
+                    laneX(playerLane, PLAYER_W) + 15,
+                    playerY() + 20,
+                    PLAYER_W - 30,
+                    PLAYER_H - 80
+                );
+
+            Iterator<int[]> it =
+                coins.iterator();
+
+            while (it.hasNext()) {
+
+                int[] coin =
+                    it.next();
+
+                Rectangle coinBox =
+                    new Rectangle(
+                        laneX(coin[0], 48),
+                        coin[1],
+                        48,
+                        48
+                    );
+
+                if (
+                    playerHitbox.intersects(
+                        coinBox
+                    )
+                ) {
+
+                    coinCount++;
+
+                    score += 100;
+
+                    playCoinSound();
+
+                    showToast("COIN GET!");
+
+                    it.remove();
+                }
+            }
+        }
         void checkCollision() {
 
             Rectangle playerHitbox = new Rectangle(
@@ -703,7 +868,55 @@ void setVolume(Clip clip, float db) {
                 PLAYER_H,
                 null
             );
+            for (int[] coin : coins) {
 
+                int x = laneX(coin[0], 48);
+
+                int bob =
+                    (int)(
+                        Math.sin(
+                            (tick + coin[1]) * 0.01
+                        ) * 10
+                    );
+
+                int drawY =
+                    coin[1] + bob;
+
+                Graphics2D g2 =
+                    (Graphics2D) g;
+
+                g2.setColor(
+                    new Color(0, 0, 0, 70)
+                );
+
+                int shadowSize =
+                    32 - Math.abs(bob);
+
+                g2.fillOval(
+                    x + (48 - shadowSize) / 2,
+                    coin[1] + 40,
+                    shadowSize,
+                    8
+                );
+
+                double phase =
+                    Math.sin(tick * 0.09);
+
+                int width =
+                    Math.max(
+                        4,
+                        (int)(48 * Math.abs(phase))
+                    );
+
+                g.drawImage(
+                    coinImg,
+                    x + (48 - width) / 2,
+                    drawY,
+                    width,
+                    48,
+                    null
+                );
+            }
             // Obstacles
             for (int[] obs : obstacles) {
                 g.drawImage(
@@ -719,7 +932,7 @@ void setVolume(Clip clip, float db) {
 
         void drawHUD(Graphics2D g) {
             g.setColor(PANEL_BG);
-            g.fillRoundRect(SAFE_MARGIN, SAFE_MARGIN, 180, 90, 14, 14);
+            g.fillRoundRect(SAFE_MARGIN, SAFE_MARGIN, 180, 115, 14, 14);
             g.setColor(new Color(255, 215, 0, 40));
             g.drawRoundRect(SAFE_MARGIN, SAFE_MARGIN, 180, 90, 14, 14);
 
@@ -729,6 +942,19 @@ void setVolume(Clip clip, float db) {
             g.setFont(FONT_BODY);
             g.drawString("Distance: " + distance, SAFE_MARGIN + 16, SAFE_MARGIN + 52);
             g.drawString("Time: " + (tick / 60) + "s", SAFE_MARGIN + 16, SAFE_MARGIN + 76);
+            g.drawString(
+                "Mode: " +
+                (difficulty == 0
+                    ? "Easy"
+                    : "Extreme"),
+                SAFE_MARGIN + 16,
+                SAFE_MARGIN + 100
+            );
+            g.drawString(
+                "Speed: " + getProgressiveSpeed(),
+                SAFE_MARGIN + 16,
+                SAFE_MARGIN + 148
+            );
         }
         void drawToast(Graphics2D g) {
 
@@ -790,12 +1016,12 @@ void setVolume(Clip clip, float db) {
             g.setComposite(old);
         }
         void drawLeaderboard(Graphics2D g) {
-            int x = getWidth() - SAFE_MARGIN - 180;
+            int boardWidth = 220;
+            int x = getWidth() - SAFE_MARGIN - boardWidth;
             g.setColor(PANEL_BG);
-            g.fillRoundRect(x, SAFE_MARGIN, 180, 130, 14, 14);
+            g.fillRoundRect(x, SAFE_MARGIN, boardWidth, 130, 14, 14);
             g.setColor(new Color(255, 215, 0, 40));
-            g.drawRoundRect(x, SAFE_MARGIN, 180, 130, 14, 14);
-
+            g.drawRoundRect(x, SAFE_MARGIN, boardWidth, 130, 14, 14);
             g.setFont(FONT_SMALL);
             g.setColor(GOLD);
             g.drawString("TOP 5", x + 12, SAFE_MARGIN + 22);
@@ -809,10 +1035,20 @@ void setVolume(Clip clip, float db) {
 
         String rankLine(int i) {
             if (i >= leaderboard.size()) {
-                return "#" + (i + 1) + "  ---  0";
+                return "#" + (i + 1) + " --- 0";
             }
+
             ScoreEntry entry = leaderboard.get(i);
-            return "#" + (i + 1) + "  " + entry.getName() + "  " + entry.getScore();
+
+            return "#"
+                + (i + 1)
+                + " "
+                + entry.getName()
+                + " "
+                + entry.getScore()
+                + " ["
+                + entry.getDifficultyName()
+                + "]";
         }
 
         void drawControls(Graphics2D g) {
